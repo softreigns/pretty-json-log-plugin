@@ -54,7 +54,7 @@ class MyConsoleInputFilter(
         }
 
 
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS")
         var defaultNode = JsonNodeFactory.instance.objectNode()
         defaultNode = defaultNode.set("@timestamp", JsonNodeFactory.instance.textNode(dateFormat.format(Date())))
         defaultNode = defaultNode.set("@level", JsonNodeFactory.instance.textNode("INFO"))
@@ -67,7 +67,9 @@ class MyConsoleInputFilter(
         if (text.length > (8000) && text.contains("@timestamp")) {
             thisLogger().warn("Log text is too large to parse: characters")
             tooLarge = true
-            val defaultText = """{"@timestamp": "${dateFormat.format(Date())}","level": "INFO","message": "Log too large to parse"}"""
+            val time = Regex("\"@timestamp\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: dateFormat.format(Date())
+            val level = Regex("\"level\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: "INFO"
+            val defaultText = """{"@timestamp": "${time}","level": "$level","message": "Log too large to parse"}"""
             logText = defaultText
         }
 
@@ -80,13 +82,13 @@ class MyConsoleInputFilter(
         val timestamp = extractTimestamp(node)
         val level = extractLevel(node)
         val stackTrace = extractStackTrace(node)
-        var message = "->" +  // Prefix the message with "---> " to make it more readable.
-            extractMessage(node)?.replace("\n", " ") // Replace newlines in the message with spaces to avoid breaking the formatting.
+        var message = extractMessage(node)?.replace("\n", " ") // Replace newlines in the message with spaces to avoid breaking the formatting.
 
         // .trimEnd('\n') is necessary because of the following reasons:
         // - When stackTrace is null or empty, we don't want to add an extra newline.
         // - When stackTrace ends with a newline, trimming the last newline makes a folding marker look better.
-        val coloredMessage = "=>$level: $message\n${stackTrace ?: ""}".trimEnd('\n')
+        val coloredMessage = if (!tooLarge) "$level: $message\n${stackTrace ?: ""}".trimEnd('\n')
+            else "$level: ${extractMessageFromText(text)}".trimEnd('\n')
 
         var xmlPrettyPrintString = ""
         if (message != null) {
