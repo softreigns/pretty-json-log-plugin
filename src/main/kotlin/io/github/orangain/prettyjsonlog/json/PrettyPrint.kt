@@ -41,3 +41,10 @@ fun prettifyXml(xml: String): String {
     transformer.transform(xmlInput, StreamResult(writer))
     return writer.toString()
 }
+
+private val prettyXmlPartRegex = Regex("""^(\s*<[^>]+>|\s*</[^>]+>|\s*<\?xml.*\?>)""")
+
+fun isPartOfPrettyXml(line: String): Boolean {
+    return prettyXmlPartRegex.containsMatchIn(line)
+}
+
