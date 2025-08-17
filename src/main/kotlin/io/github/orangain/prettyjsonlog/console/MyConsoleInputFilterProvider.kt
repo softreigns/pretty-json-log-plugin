@@ -1,5 +1,6 @@
 package io.github.orangain.prettyjsonlog.console
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.intellij.execution.filters.ConsoleDependentInputFilterProvider
 import com.intellij.execution.filters.InputFilter
@@ -10,6 +11,7 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Pair
 import com.intellij.psi.search.GlobalSearchScope
+import io.github.orangain.prettyjsonlog.json.getJsonNode
 import io.github.orangain.prettyjsonlog.json.parseJson
 import io.github.orangain.prettyjsonlog.json.prettifyXml
 import io.github.orangain.prettyjsonlog.json.prettyPrintJson
@@ -36,7 +38,9 @@ class MyConsoleInputFilterProvider : ConsoleDependentInputFilterProvider() {
 private val zoneId = ZoneId.systemDefault()
 private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
 
-private val jsonPartPattern = Regex("""\{[^}]*\}""")
+//private val jsonPartPattern = Regex("""\{[^}]*\}""")
+//private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})*\}|\[(?:[^\[\]]|\[[^\[\]]*\])*\])""")
+private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})+\}|\[(?:[^\[\]]|\[[^\[\]]*\])+])""")
 private val xmlPartPattern = Regex("<\\?xml.*?\\?>\\s*<([a-zA-Z_][\\w\\-.]*)(?:\\s[^>]*)?>.*?</\\1>", RegexOption.DOT_MATCHES_ALL)
 
 class MyConsoleInputFilter(
@@ -67,7 +71,7 @@ class MyConsoleInputFilter(
             thisLogger().warn("Log text is too large to parse: characters")
             tooLarge = true
             val time = Regex("\"@timestamp\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: dateFormat.format(Date())
-            val level = Regex("\"level\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: "INFO"
+            val level = Regex("\"level\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: "UNKNOWN"
             val defaultText = """{"@timestamp": "${time}","level": "$level","message": "Log too large to parse"}"""
             logText = defaultText
         }
@@ -114,8 +118,8 @@ class MyConsoleInputFilter(
             for(item in jsonParts.iterator()) {
                 for(group in item.groups) {
                     val jString = group?.value.toString()
-                    val (jNode, jSuffixWhitespaces) = parseJson(jString) ?: break
-                    val jsonPString = prettyPrintJson(jNode)
+                    val jsonNode: JsonNode = getJsonNode(jString) ?: break
+                    val jsonPString = prettyPrintJson(jsonNode)
                     jsonPartsPrettyString += if (jsonPartsPrettyString.isEmpty()) jsonPString else "\n$jsonPString"
                 }
             }

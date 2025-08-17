@@ -17,6 +17,14 @@ fun parseJson(text: String): Pair<JsonNode, String>? {
     }
 }
 
+fun getJsonNode(text: String): JsonNode? {
+    return try {
+        mapper.readTree(text.trim())
+    } catch (e: Exception) {
+        null
+    }
+}
+
 fun getJson(jsonText: String): Pair<JsonNode, String>? {
     return try {
         val trimmedText = jsonText.trim()

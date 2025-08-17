@@ -25,7 +25,8 @@ class MyPrettyPrinter : DefaultPrettyPrinter() {
     }
 }
 
-private val prettyJsonPartRegex = Regex("""^([{}]| {2,}(".*": |}))""")
+//private val prettyJsonPartRegex = Regex("""^([{}]| {2,}(".*": |}))""")
+private val prettyJsonPartRegex = Regex("""^([{]|\[ \{| {2,}(".*": |[}\]])|[}\]].*)""")
 
 fun isPartOfPrettyJson(line: String): Boolean {
     return prettyJsonPartRegex.containsMatchIn(line)
