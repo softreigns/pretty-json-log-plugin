@@ -11,16 +11,14 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Pair
 import com.intellij.psi.search.GlobalSearchScope
-import io.github.orangain.prettyjsonlog.json.getJsonNode
-import io.github.orangain.prettyjsonlog.json.parseJson
-import io.github.orangain.prettyjsonlog.json.prettifyXml
-import io.github.orangain.prettyjsonlog.json.prettyPrintJson
 import io.github.orangain.prettyjsonlog.logentry.*
 import io.github.orangain.prettyjsonlog.service.EphemeralStateService
 import java.text.SimpleDateFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
+import com.google.gson.Gson
+import io.github.orangain.prettyjsonlog.json.*
 
 // We use ConsoleDependentInputFilterProvider instead of ConsoleInputFilterProvider because we need to access
 // ConsoleView and Project in the filter.
@@ -38,9 +36,10 @@ class MyConsoleInputFilterProvider : ConsoleDependentInputFilterProvider() {
 private val zoneId = ZoneId.systemDefault()
 private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
 
-//private val jsonPartPattern = Regex("""\{[^}]*\}""")
+private val jsonPartPattern = Regex("""\{[^}]*\}""")
 //private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})*\}|\[(?:[^\[\]]|\[[^\[\]]*\])*\])""")
-private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})+\}|\[(?:[^\[\]]|\[[^\[\]]*\])+])""")
+//private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})+\}|\[(?:[^\[\]]|\[[^\[\]]*\])+])""")
+//private val jsonPartPattern = Regex("""(\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*"|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*")*\]|\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*")*\})+\}|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*"|\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*")*\}|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*")*\])+\])""")
 private val xmlPartPattern = Regex("<\\?xml.*?\\?>\\s*<([a-zA-Z_][\\w\\-.]*)(?:\\s[^>]*)?>.*?</\\1>", RegexOption.DOT_MATCHES_ALL)
 
 class MyConsoleInputFilter(
@@ -70,10 +69,18 @@ class MyConsoleInputFilter(
         if (text.length > (8000) && text.contains("@timestamp")) {
             thisLogger().warn("Log text is too large to parse: characters")
             tooLarge = true
+            var textMessage: String? = null
+            try {
+                textMessage = extractFieldsFromText(text)
+            } catch (e: Exception) {
+                thisLogger().warn("Failed to extract fields from text: $text", e)
+                textMessage = "Log too large to parse"
+            }
             val time = Regex("\"@timestamp\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: dateFormat.format(Date())
             val level = Regex("\"level\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(text)?.groups?.get(1)?.value ?: "UNKNOWN"
-            val defaultText = """{"@timestamp": "${time}","level": "$level","message": "Log too large to parse"}"""
+            val defaultText = """{"@timestamp": "${time}","level": "$level","message": "$textMessage"}"""
             logText = defaultText
+
         }
 
         if (parseJson(logText) == null)
@@ -90,8 +97,7 @@ class MyConsoleInputFilter(
         // .trimEnd('\n') is necessary because of the following reasons:
         // - When stackTrace is null or empty, we don't want to add an extra newline.
         // - When stackTrace ends with a newline, trimming the last newline makes a folding marker look better.
-        val coloredMessage = if (!tooLarge) "$level: $message\n${stackTrace ?: ""}".trimEnd('\n')
-            else "$level: ${extractFieldsFromText(text)}".trimEnd('\n')
+        val coloredMessage = "$level: $message\n${stackTrace ?: ""}".trimEnd('\n')
 
         var xmlPrettyPrintString = ""
         if (message != null) {
@@ -113,17 +119,33 @@ class MyConsoleInputFilter(
         }
 
         var jsonPartsPrettyString = ""
-        val jsonParts = message?.let { jsonPartPattern.findAll(it, 0) }
-        if (jsonParts != null) {
-            for(item in jsonParts.iterator()) {
-                for(group in item.groups) {
-                    val jString = group?.value.toString()
-                    val jsonNode: JsonNode = getJsonNode(jString) ?: break
+        if (!message.isNullOrEmpty()) {
+            val jsonElements = extractJsonElements(message)
+//            println("Found ${jsonElements.size} valid JSON element(s):")
+            jsonElements.forEach {
+                thisLogger().debug("Found valid JSON element: $it")
+                val jsonNode: JsonNode? = getJsonNode(it.toString())
+                if (jsonNode != null) {
                     val jsonPString = prettyPrintJson(jsonNode)
                     jsonPartsPrettyString += if (jsonPartsPrettyString.isEmpty()) jsonPString else "\n$jsonPString"
                 }
             }
         }
+
+//        val jsonParts = message?.let {
+//            jsonPartPattern.findAll(it, 0)
+//        }
+//        if (jsonParts != null) {
+//            for(item in jsonParts.iterator()) {
+//                for(group in item.groups) {
+//                    val jString = group?.value.toString()
+//                    val jsonNode: JsonNode = getJsonNode(jString) ?: break
+//                    val jsonPString = prettyPrintJson(jsonNode)
+//                    jsonPartsPrettyString += if (jsonPartsPrettyString.isEmpty()) jsonPString else "\n$jsonPString"
+//                }
+//            }
+//        }
+
         if (jsonPartsPrettyString.isNotEmpty()) {
             jsonPartsPrettyString = "\n${jsonPartsPrettyString.trim()}"
         }
