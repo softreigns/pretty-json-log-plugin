@@ -40,7 +40,8 @@ private val jsonPartPattern = Regex("""\{[^}]*\}""")
 //private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})*\}|\[(?:[^\[\]]|\[[^\[\]]*\])*\])""")
 //private val jsonPartPattern = Regex("""(\{(?:[^{}]|\{[^{}]*\})+\}|\[(?:[^\[\]]|\[[^\[\]]*\])+])""")
 //private val jsonPartPattern = Regex("""(\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*"|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*")*\]|\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*")*\})+\}|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*"|\{(?:[^{}"[\]]|"(?:\\.|[^"\\])*")*\}|\[(?:[^\[\]{}"\\]|"(?:\\.|[^"\\])*")*\])+\])""")
-private val xmlPartPattern = Regex("<\\?xml.*?\\?>\\s*<([a-zA-Z_][\\w\\-.]*)(?:\\s[^>]*)?>.*?</\\1>", RegexOption.DOT_MATCHES_ALL)
+//private val xmlPartPattern = Regex("<\\?xml.*?\\?>\\s*<([a-zA-Z_][\\w\\-.]*)(?:\\s[^>]*)?>.*?</\\1>", RegexOption.DOT_MATCHES_ALL)
+private val xmlPartPattern = Regex("""(?:<\?xml.*?\?>\s*)?<([a-zA-Z_][\w\-.]*)(?:\s[^>]*)?>.*?</\1>""", RegexOption.DOT_MATCHES_ALL)
 
 class MyConsoleInputFilter(
     private val consoleView: ConsoleView,
@@ -100,15 +101,28 @@ class MyConsoleInputFilter(
         val coloredMessage = "$level: $message\n${stackTrace ?: ""}".trimEnd('\n')
 
         var xmlPrettyPrintString = ""
+        val xmlRegex = Regex("""<([a-zA-Z_][\w.-]*)(\s[^<>]*)?>(.*?)</\1>""",RegexOption.DOT_MATCHES_ALL)
         if (message != null) {
-            val xmlParts = xmlPartPattern.findAll(message)
-            for (item in xmlParts.iterator()) {
-                val xmlString = item.groups[0]?.value.toString()
-                val onelineXML = xmlString.replace("\n", "")
-                if (message != null) {
-                    message = message.replace(xmlString, onelineXML)
-                }
-                var xmlPString = prettifyXml(xmlString)
+            val xmlBlocks = xmlRegex.findAll(message).map { it.value.trim() }.toList()
+
+            for ((index, xml) in xmlBlocks.withIndex()) {
+                println("\nFragment #${index + 1}: $xml")
+//                try {
+//                    val doc = parseXml(xml)
+//                    val root = doc.documentElement
+//                    println("  Root: ${root.tagName}")
+//                } catch (e: Exception) {
+//                    println("  ❌ Failed to parse fragment: ${e.message}")
+//                }
+//            }
+//            val xmlParts = xmlPartPattern.findAll(message)
+//            for (item in xmlParts.iterator()) {
+//                val xmlString = item.groups[0]?.value.toString()
+//                val onelineXML = xmlString.replace("\n", "")
+//                if (message != null) {
+//                    message = message.replace(xmlString, onelineXML)
+//                }
+                var xmlPString = prettifyXml(xml)
                 xmlPString = xmlPString.replace(Regex("\n[\\s]*\n"), "\n")
                 xmlPString = xmlPString.trimEnd('\n')
                 xmlPrettyPrintString +=  if (xmlPrettyPrintString.isEmpty()) xmlPString else "\n${xmlPString.trim()}"
@@ -123,11 +137,13 @@ class MyConsoleInputFilter(
             val jsonElements = extractJsonElements(message)
 //            println("Found ${jsonElements.size} valid JSON element(s):")
             jsonElements.forEach {
-                thisLogger().debug("Found valid JSON element: $it")
-                val jsonNode: JsonNode? = getJsonNode(it.toString())
-                if (jsonNode != null) {
-                    val jsonPString = prettyPrintJson(jsonNode)
-                    jsonPartsPrettyString += if (jsonPartsPrettyString.isEmpty()) jsonPString else "\n$jsonPString"
+                if (it.toString().contains(":")) {
+                    thisLogger().debug("Found valid JSON element: $it")
+                    val jsonNode: JsonNode? = getJsonNode(it.toString())
+                    if (jsonNode != null) {
+                        val jsonPString = prettyPrintJson(jsonNode)
+                        jsonPartsPrettyString += if (jsonPartsPrettyString.isEmpty()) jsonPString else "\n$jsonPString"
+                    }
                 }
             }
         }

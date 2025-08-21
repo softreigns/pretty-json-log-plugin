@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Document
+import java.io.ByteArrayInputStream
 
 private val jsonPattern = Regex("""^\s*(\{.*})(\s*)$""")
 
@@ -98,4 +101,11 @@ fun findMatchingJsonEnd(input: String, startIndex: Int): Int {
     }
 
     return -1 // No matching closing bracket found
+}
+
+fun parseXml(xml: String): Document {
+    val factory = DocumentBuilderFactory.newInstance()
+    val builder = factory.newDocumentBuilder()
+    val input = ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8))
+    return builder.parse(input)
 }
